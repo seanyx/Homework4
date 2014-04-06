@@ -1,0 +1,126 @@
+\documentclass[a4paper]{article}
+\usepackage[british]{babel}
+\begin{document}
+\title{Inverse Theory: Homework 03 part1}
+\author{Xiao Yang}
+\maketitle\thispagestyle{empty}
+%\section{Introduction}
+
+\subsection*{Problem 3.4 in the Aster's textbook (2nd edition): with only colume and row scans}
+
+<<data_import,eval=TRUE,tidy=T>>=
+library(pracma) 
+library(PEIP) 
+setwd('~/Dropbox/class2014spring/InverseTheory/hw3/')
+load('colscan.mat.RDATA') 
+colscan=G$colscan 
+load('diag1scan.mat.RDATA') 
+diagCscan=G$diag1scan 
+load('diag2scan.mat.RDATA') 
+diagDscan=G$diag2scan 
+load('rowscan.mat.RDATA') 
+rowscan=G$rowscan 
+load('std.mat.RDATA') 
+
+prepMatrix=function(z) { 	
+	## this function pre-rotate the input matrix by 90 degree clockwise to canceling
+	## the rotation effect from using image() function
+	N=nrow(z) 	
+	tt=N:1 	
+	z1=z[tt,] 	
+	t(z1) 
+}
+
+# the code for the function below is attached in a separate page. 
+source('plotMatrix.R')
+@
+
+Generate the design matrix G for row and colume scans:
+<<Generate design matrix,eval=TRUE,tidy=T>>=
+G1=matrix(data=0,nrow=32,ncol=256) 
+p.row=seq(1,16*15+1,by=16) 
+temp=rep(1,16) 
+for ( i in 1:32) { 	
+		if (i <= 16) G1[i,p.row[i]:(p.row[i]+15)]=temp 	
+			if (i >= 17) G1[i,p.row+i-17]=temp 
+} 
+@
+
+Singular spectrum of the design matrix. The 32th singular value is essentially zero in this case.
+<<SingularValues,eval=T,tidy=T>>=
+## Here I assume m is ordered by row (EW direction) ## m=[s11,s12,s13,...] 
+d=c(rowscan[,5],colscan[,5])
+svdG1=svd(G1,nv=ncol(G1)) 
+s=svdG1$d 
+U=svdG1$u 
+V=svdG1$v 
+S=cbind(diag(s),matrix(0,nrow=length(s),ncol=ncol(G1)-length(s)))
+plot(s,main='Singular value spectrum: Colscan + Rowscan') 
+@
+\subsubsection*{a. Rank of the design matrix G is 31}
+<<rankAndNullSpace,eval=T,tidy=T>>=
+### a. rank of G 
+print('The rank of Matrix G is:') 
+rnk(S) 
+
+p=31 
+pS=S[1:p,1:p] 
+pU=U[,1:p] 
+pV=V[,1:p]
+
+V0=V[,(p+1):ncol(V)] ## model null space
+print('# of basis vectors for the model null space:')
+ncol(V0)
+U0=U[,(p+1):ncol(U)] ## data null space
+print('# of basis vectors for the data null space:')
+ncol(U)-p
+@
+
+Examples for model null space and data null space:
+<<Nullspaces,eval=T,tidy=T>>=
+# one example of model null space
+cols=rainbow(n=20,s=1,start=0,end=0.8)
+
+# model null space
+NG1=matrix(V0[,3],nrow=16,byrow=T) 
+plotMatrix(NG1,cols)
+
+# data null space 
+plot(matrix(U[,32],nrow=nrow(G1)))
+@
+
+\subsubsection*{b. Since rank(G) is smaller than both m and n of G. The generalized solution is the least square solution of minimum length. And the solution is not unique, since the model null space (N(G)) is not trivia. Generalized solution with any combination of the basis vector in N(G) is a solution of Gm=d. At the same time, the data null space is non-trivia too. So the observed data plus any combination of the basis of N(t(G)) can give a the same generalized solution.}
+
+<<resolution,eval=T,tidy=T>>=
+Rm=pV%*%t(pV) 
+Rm1=matrix(diag(Rm),nrow=16,byrow=T) 
+trRm1=sum(diag(Rm))
+print('The maximum diagonal value in the resolution matrix is:')
+max(diag(Rm))
+@
+\subsubsection*{c. Since there is no value in the diagonal of the resolution matrix that is close to one, so there is no parameter in this case that has perfect resolution.}
+
+\subsubsection*{d. Slowness perturbation}
+<<slowness,eval=T>>=
+### d. plot the slowness perturbation
+m=pV %*% solve(pS) %*% t(pU) %*%d 
+mM=matrix(m,ncol=16,byrow=T) 
+plotMatrix(mM,cols) 
+@
+
+\subsubsection*{e. The resolution matrix for the model parameters:}
+<<resoMatrix,eval=T,tidy=T>>=
+### e. Model resolution matrix 
+plotMatrix(Rm1,cols)
+@
+
+\subsubsection*{f. An example of a wild model by adding arbitrary linear combination of the model null space basis vectors:}
+<<wildModel,tidy=T,eval=T>>=
+### f. a wild model 
+m0=m 
+m1=10*V0[,10] 
+m.new=m0+m1 
+plotMatrix(matrix(m.new,ncol=16,byrow=T),cols) 
+@
+
+\end{document}
