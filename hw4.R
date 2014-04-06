@@ -1,17 +1,19 @@
-library(RSEIS)
-library(GEOmap)
-library(akima)
-vv = getpfile("03092106124p" )
+## This code extract pick time for P wave from "03092106124p" and seismic station information from "wash2.sta.now", then solve for the hypocenter location using velocity model stored in file "PNW3.vel"
+library(RSEIS) ## used for extract arrival time, velocity model, and station information from files 
+library(GEOmap) ## used for convert lat/lon to UTM coordinates
+library(akima) ## used for 2d interpolation contour plot for arrival time
+library(Rquake) ## calculate the derivative matrix and arrival time
 
-####  the station and arrival information is stored
+
+vv = getpfile("03092106124p" ) ## get arrival time
+
+###  the station and arrival information is stored
 ###  in  a list of station stuff:  STAS
 
 # data.frame(vv$STAS)
 
-
 # ####  the earthquake location is stored in a list LOC
 # vv$LOC
-
 
 ####   the arrival times are seconds after the event minute
 
@@ -20,18 +22,9 @@ vv = getpfile("03092106124p" )
 # vv$LOC$hr
 # vv$LOC$mi
 
-#####
+sta = setstas("wash2.sta.now") ## get station information
 
-##### The station locations are stored in two files
-##  I am not sure which is best -
-##   maybe either
-##wash2.sta.now
-##wash2.sta
-
-
-sta = setstas("wash2.sta.now")
-
-vel <- Get1Dvel("PNW3.vel", PLOT = FALSE)
+vel <- Get1Dvel("PNW3.vel", PLOT = FALSE) ## get velocity model
 
 # names(sta)
 
@@ -49,9 +42,9 @@ rownames(STA)=name.stations
 colnames(STA)=c('lat','lon','z','sec','err')
 
 ## then convert the lat/lon to cartisian coordinates
-orglat=median(STA[,'lat'])
-orglon=median(STA[,'lon'])
-proj=setPROJ(type=2,orglat,orglon)
+orglat=median(STA[,'lat']) ## set the central latitude for coordinates conversion
+orglon=median(STA[,'lon']) ## set the central longitude for coordinates conversion
+proj=setPROJ(type=2,orglat,orglon) ## set the target projection to utm.sphr
 xy=GLOB.XY(STA[,1],STA[,2],proj)
 STAxy=cbind(xy$x,xy$y,STA[,'sec'],STA[,'err'])
 rownames(STAxy)=rownames(STA)
@@ -61,7 +54,9 @@ colnames(STAxy)=c('x','y','sec','err')
 x=STAxy[,1]
 y=STAxy[,2]
 tt=STAxy[,3]
-cols=(tt-min(tt))/(max(tt)-min(tt))
+err=STAxy[,4]
+sta.names=rownames(STAxy)
+cols=(tt-min(tt))/(max(tt)-min(tt)) ## scale for color map
 dev.new()
 plot(x,y,col=gray(cols),pch=20)
 points(x,y)
@@ -92,12 +87,12 @@ for (i in 1:10000) {
 	dely=EQ$y-y
 	deltadis=sqrt(delx^2+dely^2) ## distance from initial guess to each station
 	temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=0,delx=delx,dely=dely,deltadis=deltadis,vel=vel) ## calculate the travel time and derivatives
-	G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) ## G matrix to Ax=b (b is the residules, x is perturbation that is solved for)
+	G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) ## G matrix to Ax=b (b is the residules, x is perturbation that needs to be solved)
 
 	observed=tt ## observed arrival time
 	## create weighting matrix according to the distance
 	distwt=10
-	wts = DistWeightXY(xy$x, xy$y, EQ$x, EQ$y, STAxy[,'err'], distwt)
+	wts = DistWeightXY(xy$x, xy$y, EQ$x, EQ$y, err, distwt)
 	predictedTT=EQ$t+temp$TT
 	## cors
 	weights=wts
@@ -120,4 +115,11 @@ for (i in 1:10000) {
 }
 
 print(paste('tolerance reached at step',i))  ## test if the result converge
-points(EQ$x,EQ$y,pch=20,col='blue')  ## 
+points(EQ$x,EQ$y,pch=4,col='red')  ## plot the calculated earthquake location
+
+refxy=GLOB.XY(vv$LOC$lat,vv$LOC$lon,proj) ## convert the earthquake location stored in the pick file to UTM projection
+refxy['z']=vv$LOC$z
+refxy['sec']=vv$LOC$sec
+
+points(refxy$x,refxy$y,pch=2,col='green')
+legend('topright',legend=c('Initial guess','Calculated location','Location from pickfile'),pch=c(10,4,2),col=c('red','red','green'))
