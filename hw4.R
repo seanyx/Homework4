@@ -24,7 +24,7 @@ vv = getpfile("03092106124p" ) ## get arrival time
 
 sta = setstas("wash2.sta.now") ## get station information
 
-vel <- Get1Dvel("PNW3.vel", PLOT = FALSE) ## get velocity model
+vel = Get1Dvel("PNW3.vel", PLOT = FALSE) ## get velocity model
 
 # names(sta)
 
@@ -39,22 +39,23 @@ err=vv$STAS$err[ind1]
 ind2=match(name.stations,sta$name)
 STA=cbind(sta$lat[ind2],sta$lon[ind2],sta$z[ind2],tt,err)
 rownames(STA)=name.stations
-colnames(STA)=c('lat','lon','z','sec','err')
+colnames(STA)=c('lat','lon','staz','sec','err')
 
 ## then convert the lat/lon to cartisian coordinates
 orglat=median(STA[,'lat']) ## set the central latitude for coordinates conversion
 orglon=median(STA[,'lon']) ## set the central longitude for coordinates conversion
 proj=setPROJ(type=2,orglat,orglon) ## set the target projection to utm.sphr
 xy=GLOB.XY(STA[,1],STA[,2],proj)
-STAxy=cbind(xy$x,xy$y,STA[,'sec'],STA[,'err'])
+STAxy=cbind(xy$x,xy$y,STA[,'sec'],STA[,'staz'],STA[,'err'])
 rownames(STAxy)=rownames(STA)
-colnames(STAxy)=c('x','y','sec','err')
+colnames(STAxy)=c('x','y','sec','staz','err')
 
 ## plot the station locations colored by the arrival time
 x=STAxy[,1]
 y=STAxy[,2]
 tt=STAxy[,3]
-err=STAxy[,4]
+err=STAxy[,5]
+staz=STAxy[,4]
 sta.names=rownames(STAxy)
 cols=(tt-min(tt))/(max(tt)-min(tt)) ## scale for color map
 dev.new()
@@ -64,13 +65,13 @@ title(main='Station locations colored by arrival time',sub='The darker the small
 
 ## interpolate the timing and contour plot
 ## contour the time arrival, guess the initial lcoation
+cex.staz=(staz-min(staz))/(max(staz)-min(staz))*3+1
 xym=interp(x,y,tt)
 ind=which(xym[[3]]==min(xym[[3]],na.rm=T),arr.ind=T)
 image(xym[[1]],xym[[2]],xym[[3]],col=gray(seq(0.3,0.9,length=100)),ann=F)
-points(x,y,pch=20,col=gray(1,alpha=0.5))
-points(x,y)
+points(x,y,pch=21,bg=gray(1,alpha=0.5),cex=cex.staz,col='black')
 points(xym[[1]][ind[1]],xym[[2]][ind[2]],pch=10,col='red')
-title(xlab='X /km',ylab='Y /km',main='Station locations and arrival time',sub='The darker the smaller the arrival time')
+title(xlab='X /km',ylab='Y /km',main='Station locations and arrival time',sub='The darker the region the smaller the arrival time')
 
 ## set up initial guess
 EQ=list(x=xym[[1]][ind[1]],y=xym[[2]][ind[2]],z=10,t=xym[[3]][ind[1],ind[2]])
@@ -86,7 +87,7 @@ for (i in 1:10000) {
 	delx=EQ$x-x
 	dely=EQ$y-y
 	deltadis=sqrt(delx^2+dely^2) ## distance from initial guess to each station
-	temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=0,delx=delx,dely=dely,deltadis=deltadis,vel=vel) ## calculate the travel time and derivatives
+	temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=-staz,delx=delx,dely=dely,deltadis=deltadis,vel=vel) ## calculate the travel time and derivatives
 	G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) ## G matrix to Ax=b (b is the residules, x is perturbation that needs to be solved)
 
 	observed=tt ## observed arrival time
@@ -122,4 +123,4 @@ refxy['z']=vv$LOC$z
 refxy['sec']=vv$LOC$sec
 
 points(refxy$x,refxy$y,pch=2,col='green')
-legend('topright',legend=c('Initial guess','Calculated location','Location from pickfile'),pch=c(10,4,2),col=c('red','red','green'))
+legend('topright',legend=c('Station location: size by elevation','Initial guess','Calculated location','Location from pickfile'),pch=c(21,10,4,2),col=c('black','red','red','green'))
