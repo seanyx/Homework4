@@ -81,7 +81,8 @@ EQini=EQ
 xtol=0.001
 ytol=0.001
 ztol=0.01
-lambdareg=100
+lambdareg=100 ## regularization factor
+distwt=10 ## distance weighting factor
 
 for (i in 1:10000) {
 	delx=EQ$x-x
@@ -92,7 +93,6 @@ for (i in 1:10000) {
 
 	observed=tt ## observed arrival time
 	## create weighting matrix according to the distance
-	distwt=10
 	wts = DistWeightXY(xy$x, xy$y, EQ$x, EQ$y, err, distwt)
 	predictedTT=EQ$t+temp$TT
 	## cors
