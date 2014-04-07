@@ -1,5 +1,10 @@
-## This code extract pick time for P wave from "03092106124p" and seismic station information from "wash2.sta.now", then solve for the hypocenter location using velocity model stored in file "PNW3.vel"
-library(RSEIS) ## used for extract arrival time, velocity model, and station information from files 
+## This code extract pick time for P wave from "03092106124p" 
+## and seismic station information from "wash2.sta.now", 
+## then solve for the hypocenter location using 
+## velocity model stored in file "PNW3.vel"
+library(RSEIS) 
+## used for extract arrival time, velocity model, 
+## and station information from files 
 library(GEOmap) ## used for convert lat/lon to UTM coordinates
 library(akima) ## used for 2d interpolation contour plot for arrival time
 library(Rquake) ## calculate the derivative matrix and arrival time
@@ -42,9 +47,12 @@ rownames(STA)=name.stations
 colnames(STA)=c('lat','lon','staz','sec','err')
 
 ## then convert the lat/lon to cartisian coordinates
-orglat=median(STA[,'lat']) ## set the central latitude for coordinates conversion
-orglon=median(STA[,'lon']) ## set the central longitude for coordinates conversion
-proj=setPROJ(type=2,orglat,orglon) ## set the target projection to utm.sphr
+## set the central latitude for coordinates conversion
+orglat=median(STA[,'lat']) 
+## set the central longitude for coordinates conversion
+orglon=median(STA[,'lon']) 
+## set the target projection to utm.sphr
+proj=setPROJ(type=2,orglat,orglon) 
 xy=GLOB.XY(STA[,1],STA[,2],proj)
 STAxy=cbind(xy$x,xy$y,STA[,'sec'],STA[,'staz'],STA[,'err'])
 rownames(STAxy)=rownames(STA)
@@ -61,7 +69,8 @@ cols=(tt-min(tt))/(max(tt)-min(tt)) ## scale for color map
 dev.new()
 plot(x,y,col=gray(cols),pch=20)
 points(x,y)
-title(main='Station locations colored by arrival time',sub='The darker the smaller the arrival time')
+title(main='Station locations colored by arrival time',
+      sub='The darker the smaller the arrival time')
 
 ## interpolate the timing and contour plot
 ## contour the time arrival, guess the initial lcoation
@@ -71,10 +80,15 @@ ind=which(xym[[3]]==min(xym[[3]],na.rm=T),arr.ind=T)
 image(xym[[1]],xym[[2]],xym[[3]],col=gray(seq(0.3,0.9,length=100)),ann=F)
 points(x,y,pch=21,bg=gray(1,alpha=0.5),cex=cex.staz,col='black')
 points(xym[[1]][ind[1]],xym[[2]][ind[2]],pch=10,col='red')
-title(xlab='X /km',ylab='Y /km',main='Station locations and arrival time',sub='The darker the region the smaller the arrival time')
+title(xlab='X (E-W) /km',ylab='Y (N-S) /km',
+      main='Station locations and arrival time',
+      sub='The darker the region the smaller the arrival time')
 
 ## set up initial guess
-EQ=list(x=xym[[1]][ind[1]],y=xym[[2]][ind[2]],z=10,t=xym[[3]][ind[1],ind[2]])
+EQ=list(x=xym[[1]][ind[1]],
+	y=xym[[2]][ind[2]],
+	z=10,
+	t=xym[[3]][ind[1],ind[2]])
 #EQ=list(x=50,y=-50,z=10,t=xym[[3]][ind[1],ind[2]])
 EQini=EQ
 ## assign tolerances
@@ -87,15 +101,20 @@ distwt=10 ## distance weighting factor
 for (i in 1:10000) {
 	delx=EQ$x-x
 	dely=EQ$y-y
-	deltadis=sqrt(delx^2+dely^2) ## distance from initial guess to each station
-	temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=-staz,delx=delx,dely=dely,deltadis=deltadis,vel=vel) ## calculate the travel time and derivatives
-	G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) ## G matrix to Ax=b (b is the residules, x is perturbation that needs to be solved)
+	## distance from previous EQ location guess to each station
+	deltadis=sqrt(delx^2+dely^2) 
+	## calculate the travel time and derivatives
+	temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=-staz,
+		     delx=delx,dely=dely,deltadis=deltadis,vel=vel) 
+	## G matrix to Ax=b (b is the residules, 
+	## x is perturbation that needs to be solved)
+	G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) 
 
 	observed=tt ## observed arrival time
 	## create weighting matrix according to the distance
 	wts = DistWeightXY(xy$x, xy$y, EQ$x, EQ$y, err, distwt)
 	predictedTT=EQ$t+temp$TT
-	## cors
+	## cors is the station corrections
 	weights=wts
 
 	## solve the linear equation
@@ -105,7 +124,9 @@ for (i in 1:10000) {
 	per=S$v %*% LAM %*% t(S$u) %*% RHS
 	
 	## test the tolerance
-	if (abs(per[2])<xtol & abs(per[3])<ytol & abs(per[4])<ztol) break
+	if (abs(per[2])<xtol 
+	    & abs(per[3])<ytol 
+	    & abs(per[4])<ztol) break
 	
 	## update the earthquake location using the perturbaton
 	EQ$x=EQ$x+per[2]
@@ -118,9 +139,68 @@ for (i in 1:10000) {
 print(paste('tolerance reached at step',i))  ## test if the result converge
 points(EQ$x,EQ$y,pch=4,col='red')  ## plot the calculated earthquake location
 
-refxy=GLOB.XY(vv$LOC$lat,vv$LOC$lon,proj) ## convert the earthquake location stored in the pick file to UTM projection
+## convert the earthquake location stored in the pick file to UTM projection
+refxy=GLOB.XY(vv$LOC$lat,vv$LOC$lon,proj) 
 refxy['z']=vv$LOC$z
 refxy['sec']=vv$LOC$sec
 
 points(refxy$x,refxy$y,pch=2,col='green')
-legend('topright',legend=c('Station location: size by elevation','Initial guess','Calculated location','Location from pickfile'),pch=c(21,10,4,2),col=c('black','red','red','green'))
+legend('topright',legend=
+       c('Station location: size by elevation','Initial guess',
+	 'Calculated location','Location from pickfile'),
+       pch=c(21,10,4,2),col=c('black','red','red','green'))
+
+## Convert the EQ location back to LL format
+EQLL=XY.GLOB(EQ$x,EQ$y,proj)
+EQ$lat=EQLL$lat; EQ$lon=EQLL$lon-360
+print(paste('The EQ is located at latitude',format(EQ$lat,digits=4),
+	    ', longitude',format(EQ$lon,digits=4),', and depth',
+	    format(EQ$z,digits=4),'km'))
+
+## Here to calculate the timing err for final EQ locating
+## EQ locating is an iterative process. Here I only used the last 
+## iteration to calculate the locating error, thus the results only
+## represents the stability of the last iteration, not the whole process.
+
+delx=EQ$x-x
+dely=EQ$y-y
+## distance from previous EQ location guess to each station
+deltadis=sqrt(delx^2+dely^2) 
+## calculate the travel time and derivatives
+temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=-staz,
+	     delx=delx,dely=dely,deltadis=deltadis,vel=vel) 
+## G matrix to Ax=b (b is the residules, 
+## x is perturbation that needs to be solved)
+G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) 
+
+observed=tt ## observed arrival time
+## create weighting matrix according to the distance
+wts = DistWeightXY(xy$x, xy$y, EQ$x, EQ$y, err, distwt)
+predictedTT=EQ$t+temp$TT
+## cors is the station corrections
+weights=wts
+## plot the weighting for each stations
+dev.new(); plot(STAxy[,'x'],STAxy[,'y'],
+		cex=(wts-min(wts))/(max(wts)-min(wts))*3+1,ann=F)
+title(main='Example of station weighting',
+      xlab='E-W',
+      ylab='N-S')
+
+## calculate the residual
+res=observed-predictedTT
+## calculate the (weighted) root mean square
+rms=sqrt(mean(res^2))
+wrms=sqrt(mean((weights*res)^2))
+
+## Here starts the locating error estimation (in km)
+dels=rep(NA,4)
+S=svd(G)
+LAM=diag(S$d/(S$d^2+lambdareg^2))
+Gdagger=S$v %*% LAM %*% t(S$u)
+covD=diag(err)
+covB=Gdagger %*% covD %*% t(Gdagger)
+
+uncer=1.96*sqrt(diag(covB)) ## 95% interval
+print(paste('error in E-W direction:',format(uncer[1],digits=4),'km',
+	    '\nerror in N-S direction:',format(uncer[2],digits=4),'km',
+	    '\nerror in z direction:',format(uncer[3],,digits=4),'km'))
