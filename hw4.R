@@ -65,12 +65,12 @@ tt=STAxy[,3]
 err=STAxy[,5]
 staz=STAxy[,4]
 sta.names=rownames(STAxy)
-cols=(tt-min(tt))/(max(tt)-min(tt)) ## scale for color map
-dev.new()
-plot(x,y,col=gray(cols),pch=20)
-points(x,y)
-title(main='Station locations colored by arrival time',
-      sub='The darker the smaller the arrival time')
+# cols=(tt-min(tt))/(max(tt)-min(tt)) ## scale for color map
+# dev.new()
+# plot(x,y,col=gray(cols),pch=20)
+# points(x,y)
+# title(main='Station locations colored by arrival time',
+#       sub='The darker the smaller the arrival time')
 
 ## interpolate the timing and contour plot
 ## contour the time arrival, guess the initial lcoation

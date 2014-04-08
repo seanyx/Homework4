@@ -7,3 +7,9 @@ PNW3.vel
 wash2.sta.now
 wash2.sta.txt
 wash2.sta.xlsx
+*.pdf
+*.log
+*.aux
+*.tex
+.Rhistory
+.RData
