@@ -84,59 +84,70 @@ title(xlab='X (E-W) /km',ylab='Y (N-S) /km',
       main='Station locations and arrival time',
       sub='The darker the region the smaller the arrival time')
 
-## set up initial guess
-EQ=list(x=xym[[1]][ind[1]],
-	y=xym[[2]][ind[2]],
-	z=10,
-	t=xym[[3]][ind[1],ind[2]])
-#EQ=list(x=50,y=-50,z=10,t=xym[[3]][ind[1],ind[2]])
-EQini=EQ
-## assign tolerances
-xtol=0.001
-ytol=0.001
-ztol=0.01
-lambdareg=100 ## regularization factor
-distwt=10 ## distance weighting factor
+EQlocate<-function(EQini,STAxy,tol,lambdareg,distwt,MaxIter) {
+	## nonliear regression to find EQ location using 
+	## regularization
+	library(RSEIS)
+	x=STAxy[,1]
+	y=STAxy[,2]
+	tt=STAxy[,3]
+	err=STAxy[,5]
+	staz=STAxy[,4]
+	observed=tt
+	EQ=EQini
+	for (i in 1:MaxIter) {
+		delx=EQ$x-x
+		dely=EQ$y-y
+		## distance from previous EQ location guess to each station
+		deltadis=sqrt(delx^2+dely^2) 
+		## calculate the travel time and derivatives
+		temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=-staz,
+			     delx=delx,dely=dely,deltadis=deltadis,vel=vel) 
+		## G matrix to Ax=b (b is the residules, 
+		## x is perturbation that needs to be solved)
+		G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) 
 
-for (i in 1:10000) {
-	delx=EQ$x-x
-	dely=EQ$y-y
-	## distance from previous EQ location guess to each station
-	deltadis=sqrt(delx^2+dely^2) 
-	## calculate the travel time and derivatives
-	temp=GETpsTT(rep('P',length(tt)),eqz=EQ$z,staz=-staz,
-		     delx=delx,dely=dely,deltadis=deltadis,vel=vel) 
-	## G matrix to Ax=b (b is the residules, 
-	## x is perturbation that needs to be solved)
-	G=cbind(rep(1,nrow(temp$Derivs)),temp$Derivs) 
+		observed=tt ## observed arrival time
+		## create weighting matrix according to the distance
+		wts = DistWeightXY(x, y, EQ$x, EQ$y, err, distwt)
+		predictedTT=EQ$t+temp$TT
+		## cors is the station corrections
+		weights=wts
 
-	observed=tt ## observed arrival time
-	## create weighting matrix according to the distance
-	wts = DistWeightXY(xy$x, xy$y, EQ$x, EQ$y, err, distwt)
-	predictedTT=EQ$t+temp$TT
-	## cors is the station corrections
-	weights=wts
+		## solve the linear equation
+		S=svd(G)
+		RHS=weights*(observed-predictedTT)
+		LAM=diag(S$d/(S$d^2+lambdareg^2))
+		per=S$v %*% LAM %*% t(S$u) %*% RHS
+		
+		## test the tolerance
+		if (abs(per[2])<xtol 
+		    & abs(per[3])<ytol 
+		    & abs(per[4])<ztol) break
+		
+		## update the earthquake location using the perturbaton
+		EQ$x=EQ$x+per[2]
+		EQ$y=EQ$y+per[3]
+		EQ$z=EQ$z+per[4]
+		EQ$t=EQ$t+per[1]
 
-	## solve the linear equation
-	S=svd(G)
-	RHS=weights*(observed-predictedTT)
-	LAM=diag(S$d/(S$d^2+lambdareg^2))
-	per=S$v %*% LAM %*% t(S$u) %*% RHS
-	
-	## test the tolerance
-	if (abs(per[2])<xtol 
-	    & abs(per[3])<ytol 
-	    & abs(per[4])<ztol) break
-	
-	## update the earthquake location using the perturbaton
-	EQ$x=EQ$x+per[2]
-	EQ$y=EQ$y+per[3]
-	EQ$z=EQ$z+per[4]
-	EQ$t=EQ$t+per[1]
-
+	}
+	print(paste('tolerance reached at step',i))  ## test if the result converge
+	return(EQ)
 }
 
-print(paste('tolerance reached at step',i))  ## test if the result converge
+## set up initial guess
+EQini=list(x=xym[[1]][ind[1]],
+	y=xym[[2]][ind[2]],
+	z=15,
+	t=xym[[3]][ind[1],ind[2]])
+#EQ=list(x=50,y=-50,z=10,t=xym[[3]][ind[1],ind[2]])
+
+tol=c(0.01, 0.01, 1)
+lambdareg=100 ## regularization factor
+distwt=10 ## distance weighting factor
+EQ=EQlocate(EQini,STAxy,tol,lambdareg,distwt,MaxIter=10000)
+
 points(EQ$x,EQ$y,pch=4,col='red')  ## plot the calculated earthquake location
 
 ## convert the earthquake location stored in the pick file to UTM projection
@@ -156,6 +167,35 @@ EQ$lat=EQLL$lat; EQ$lon=EQLL$lon-360
 print(paste('The EQ is located at latitude',format(EQ$lat,digits=4),
 	    ', longitude',format(EQ$lon,digits=4),', and depth',
 	    format(EQ$z,digits=4),'km'))
+
+## Here I test how the initial depth guess influence the final depth estimation
+nd=100
+depth=seq(8,25,length=nd)
+depth.est=rep(NA,nd)
+xyloc=matrix(ncol=2,nrow=nd)
+tt=rep(NA,nd)
+
+for (i in 1:nd) {
+	
+	EQini=list(x=xym[[1]][ind[1]],
+		y=xym[[2]][ind[2]],
+		z=depth[i],
+		t=xym[[3]][ind[1],ind[2]])
+
+	tol=c(0.01, 0.01, 1)
+	lambdareg=100 ## regularization factor
+	distwt=10 ## distance weighting factor
+	EQtemp=EQlocate(EQini,STAxy,tol,lambdareg,distwt,MaxIter=10000)
+	depth.est[i]=EQtemp$z
+	xyloc[i,]=c(EQtemp$x,EQtemp$y)
+	tt[i]=EQtemp$t
+}
+dev.new(); plot(depth,depth.est)
+dev.new(); hist(xyloc[,1])
+dev.new(); hist(xyloc[,2])
+dev.new(); hist(tt)
+
+
 
 ## Here to calculate the timing err for final EQ locating
 ## EQ locating is an iterative process. Here I only used the last 
