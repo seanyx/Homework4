@@ -84,7 +84,8 @@ title(xlab='X (E-W) /km',ylab='Y (N-S) /km',
       main='Station locations and arrival time',
       sub='The darker the region the smaller the arrival time')
 
-EQlocate<-function(EQini,STAxy,tol,lambdareg,distwt,MaxIter) {
+## set up a function to do EQ locating
+EQlocate<-function(EQini,STAxy,tol,lambdareg,distwt,MaxIter,cper=1) {
 	## nonliear regression to find EQ location using 
 	## regularization
 	library(RSEIS)
@@ -121,18 +122,18 @@ EQlocate<-function(EQini,STAxy,tol,lambdareg,distwt,MaxIter) {
 		per=S$v %*% LAM %*% t(S$u) %*% RHS
 		
 		## test the tolerance
-		if (abs(per[2])<xtol 
-		    & abs(per[3])<ytol 
-		    & abs(per[4])<ztol) break
+		if (abs(per[2])<tol[1] 
+		    & abs(per[3])<tol[2] 
+		    & abs(per[4])<tol[3]) break
 		
 		## update the earthquake location using the perturbaton
-		EQ$x=EQ$x+per[2]
-		EQ$y=EQ$y+per[3]
-		EQ$z=EQ$z+per[4]
+		EQ$x=EQ$x+per[2]*cper
+		EQ$y=EQ$y+per[3]*cper
+		EQ$z=EQ$z+per[4]*cper
 		EQ$t=EQ$t+per[1]
 
 	}
-	print(paste('tolerance reached at step',i))  ## test if the result converge
+	# print(paste('tolerance reached at step',i))  ## test if the result converge
 	return(EQ)
 }
 
@@ -143,10 +144,10 @@ EQini=list(x=xym[[1]][ind[1]],
 	t=xym[[3]][ind[1],ind[2]])
 #EQ=list(x=50,y=-50,z=10,t=xym[[3]][ind[1],ind[2]])
 
-tol=c(0.01, 0.01, 1)
+tol=c(0.001, 0.001, 0.01)
 lambdareg=100 ## regularization factor
 distwt=10 ## distance weighting factor
-EQ=EQlocate(EQini,STAxy,tol,lambdareg,distwt,MaxIter=10000)
+EQ=EQlocate(EQini,STAxy,tol,lambdareg,distwt,MaxIter=10000,cper=1)
 
 points(EQ$x,EQ$y,pch=4,col='red')  ## plot the calculated earthquake location
 
@@ -168,35 +169,105 @@ print(paste('The EQ is located at latitude',format(EQ$lat,digits=4),
 	    ', longitude',format(EQ$lon,digits=4),', and depth',
 	    format(EQ$z,digits=4),'km'))
 
-## Here I test how the initial depth guess influence the final depth estimation
-nd=100
+# Here I test how the initial depth guess influence the final depth estimation
+nd=50
 depth=seq(8,25,length=nd)
 depth.est=rep(NA,nd)
 xyloc=matrix(ncol=2,nrow=nd)
 tt=rep(NA,nd)
+tol=c(0.001, 0.001, 0.01)
+lambdareg=100 ## regularization factor
+distwt=10 ## distance weighting factor
+
+for (i in 1:nd) {
+        
+        EQini=list(x=xym[[1]][ind[1]],
+                y=xym[[2]][ind[2]],
+                z=depth[i],
+                t=xym[[3]][ind[1],ind[2]])
+
+        EQtemp=EQlocate(EQini,STAxy,tol,lambdareg,distwt,MaxIter=10000)
+        depth.est[i]=EQtemp$z
+        xyloc[i,]=c(EQtemp$x,EQtemp$y)
+        tt[i]=EQtemp$t
+}
+oldpar=par(no.readonly=T)
+par(mar=c(1,4,1,4))
+plot(c(0,1),range(c(depth,depth.est)),type='n',ann=F,axes=F)
+axis(2,at=pretty(depth))
+axis(4,at=pretty(depth))
+segments(rep(0,nd),depth,rep(1,nd),depth.est,lty=1)
+par(oldpar)
+
+## Here I test how the horizontal initial guess influence the final depth estimation
+nd=50
+depth=15
+depth.est=rep(NA,nd)
+xyloc=matrix(ncol=2,nrow=nd)
+t.est=rep(NA,nd)
+
+tol=c(0.001, 0.001, 0.01)
+lambdareg=100 ## regularization factor
+distwt=10 ## distance weighting factor
+
+# x, y guess
+div=25
+set.seed(1718)
+
+xguess=runif(nd,min=xym[[1]][ind[1]]-div,max=xym[[1]][ind[1]]+div)
+yguess=runif(nd,min=xym[[2]][ind[2]]-div,max=xym[[2]][ind[2]]+div)
 
 for (i in 1:nd) {
 	
-	EQini=list(x=xym[[1]][ind[1]],
-		y=xym[[2]][ind[2]],
-		z=depth[i],
+	EQini=list(x=xguess[i],
+		y=yguess[i],
+		z=depth,
 		t=xym[[3]][ind[1],ind[2]])
 
-	tol=c(0.01, 0.01, 1)
-	lambdareg=100 ## regularization factor
-	distwt=10 ## distance weighting factor
-	EQtemp=EQlocate(EQini,STAxy,tol,lambdareg,distwt,MaxIter=10000)
+	EQtemp=EQlocate(EQini,STAxy,tol,lambdareg,distwt,MaxIter=10000,cper=1)
 	depth.est[i]=EQtemp$z
 	xyloc[i,]=c(EQtemp$x,EQtemp$y)
-	tt[i]=EQtemp$t
+	t.est[i]=EQtemp$t
+
+	#         print(paste('finished guess',i))
 }
-dev.new(); plot(depth,depth.est)
-dev.new(); hist(xyloc[,1])
-dev.new(); hist(xyloc[,2])
-dev.new(); hist(tt)
 
+breaks=10
+dev.new()
+par(mfrow=c(2,2))
+hist(depth.est,breaks=breaks,main='',xlab='Depth')
+abline(v=EQ$z,col='red',lwd=2,lty=2)
+hist(xyloc[,1],breaks=breaks,main='',xlab='X /km')
+abline(v=EQ$x,col='red',lwd=2,lty=2)
+hist(xyloc[,2],breaks=breaks,main='',xlab='Y /km')
+abline(v=EQ$y,col='red',lwd=2,lty=2)
+hist(t.est,breaks=breaks,main='',xlab='t /sec')
+abline(v=EQ$t,col='red',lwd=2,lty=2)
+par(mfrow=c(1,1))
 
+dev.new() 
+par(mfrow=c(2,2))
+xlim=c(xym[[1]][ind[1]]-div,xym[[1]][ind[1]]+div)
+ylim=c(xym[[2]][ind[2]]-div,xym[[2]][ind[2]]+div)
 
+plot(STAxy[,'x'],STAxy[,'y'],pch=22,col='blue',ann=F)
+abline(h=ylim,lty=3,col='grey')
+abline(v=xlim,lty=3,col='grey')
+points(xguess,yguess,col='red',pch=21,cex=0.8)
+title(xlab='X /km',ylab='Y /km')
+
+plot(xguess,yguess,col='red',pch=21,xlim=xlim,ylim=ylim,cex=0.8,ann=F)
+title(xlab='Initial guess X',ylab='Initial guess Y')
+
+plot(STAxy[,'x'],STAxy[,'y'],pch=22,col='blue',ann=F)
+abline(h=ylim,lty=3,col='grey')
+abline(v=xlim,lty=3,col='grey')
+points(xyloc[,1],xyloc[,2],col='red',cex=0.8)
+title(xlab='X /km',ylab='Y /km')
+
+plot(xyloc[,1],xyloc[,2],col='red',pch=21,xlim=xlim,ylim=ylim,cex=0.8,ann=F)
+title(xlab='EQ location X',ylab='EQ location Y')
+par(mfrow=c(1,1))
 ## Here to calculate the timing err for final EQ locating
 ## EQ locating is an iterative process. Here I only used the last 
 ## iteration to calculate the locating error, thus the results only
